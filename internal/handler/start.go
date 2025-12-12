@@ -35,9 +35,17 @@ func (h *Handler) handleStart(c tele.Context) error {
 
 	// Show main menu
 	h.ResetState(userID)
-	return c.Send(
-		"🏠 Главное меню\n\nВыберите действие:",
-		mainMenuMarkup(),
-	)
+	text := "🏠 Главное меню\n\nВыберите действие:"
+	markup := mainMenuMarkup()
+
+	// Edit message if callback, send new if command
+	if c.Callback() != nil {
+		if err := c.Edit(text, markup); err != nil {
+			// If can't edit (message too old), send new
+			return c.Send(text, markup)
+		}
+		return c.Respond()
+	}
+	return c.Send(text, markup)
 }
 
