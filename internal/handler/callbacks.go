@@ -17,9 +17,10 @@ func (h *Handler) handleCallback(c tele.Context) error {
 		return nil
 	}
 
-	data := callback.Data
+	data := strings.TrimSpace(callback.Data) // Trim whitespace and control characters
 	h.logger.Info("handleCallback: Processing callback",
 		zap.String("data", data),
+		zap.String("data_raw", callback.Data),
 		zap.String("id", callback.ID),
 		zap.String("unique", callback.Unique),
 		zap.Int64("user_id", c.Sender().ID),
@@ -38,6 +39,7 @@ func (h *Handler) handleCallback(c tele.Context) error {
 	}
 
 	// Handle by Data if Unique is empty (dynamic buttons)
+	// Trim data to remove any control characters
 	switch {
 	case strings.HasPrefix(data, "page_"):
 		return h.handlePagination(c, data)
@@ -160,7 +162,8 @@ func (h *Handler) handleCancel(c tele.Context) error {
 func (h *Handler) handlePagination(c tele.Context, data string) error {
 	userID := c.Sender().ID
 
-	// Extract page number
+	// Extract page number - trim whitespace first
+	data = strings.TrimSpace(data)
 	pageStr := strings.TrimPrefix(data, "page_")
 	page, err := strconv.Atoi(pageStr)
 	if err != nil {
@@ -217,9 +220,10 @@ func (h *Handler) handlePagination(c tele.Context, data string) error {
 func (h *Handler) handleDaySelection(c tele.Context, data string) error {
 	userID := c.Sender().ID
 
-	// Extract date
+	// Extract date - trim whitespace first, then remove prefix
+	data = strings.TrimSpace(data)
 	dateStr := strings.TrimPrefix(data, "day_")
-	h.logger.Info("Handling day selection", zap.String("date", dateStr), zap.Int64("user_id", userID))
+	h.logger.Info("Handling day selection", zap.String("date", dateStr), zap.String("original_data", data), zap.Int64("user_id", userID))
 
 	words, err := h.wordService.GetWordsByDate(userID, dateStr)
 	if err != nil {
