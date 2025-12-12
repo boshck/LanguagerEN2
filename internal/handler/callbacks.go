@@ -9,7 +9,8 @@ import (
 	tele "gopkg.in/telebot.v3"
 )
 
-// handleCallback handles all callback queries
+// handleCallback handles dynamic callback queries (day_*, page_*)
+// Specific button callbacks are handled by their own handlers registered before this
 func (h *Handler) handleCallback(c tele.Context) error {
 	callback := c.Callback()
 	if callback == nil {
@@ -17,21 +18,7 @@ func (h *Handler) handleCallback(c tele.Context) error {
 	}
 
 	data := callback.Data
-	h.logger.Info("Callback received", zap.String("data", data), zap.Int64("user_id", c.Sender().ID))
-
-	// Handle specific button callbacks by Unique
-	switch data {
-	case "view_days":
-		return h.handleViewDays(c)
-	case "random_pair", "more":
-		return h.handleRandomPair(c)
-	case "cancel":
-		return h.handleCancel(c)
-	case "back", "main_menu":
-		return h.handleStart(c)
-	case "back_to_days":
-		return h.handleViewDays(c)
-	}
+	h.logger.Info("Callback received in handleCallback", zap.String("data", data), zap.Int64("user_id", c.Sender().ID))
 
 	// Handle pagination callbacks
 	if strings.HasPrefix(data, "page_") {
@@ -43,8 +30,8 @@ func (h *Handler) handleCallback(c tele.Context) error {
 		return h.handleDaySelection(c, data)
 	}
 
-	// Acknowledge callback
-	h.logger.Warn("Unhandled callback", zap.String("data", data))
+	// If it's not a dynamic callback we handle, acknowledge it anyway
+	h.logger.Warn("Unhandled callback in handleCallback", zap.String("data", data))
 	return c.Respond()
 }
 

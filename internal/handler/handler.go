@@ -46,8 +46,18 @@ func (h *Handler) RegisterHandlers() {
 	// Text messages
 	h.bot.Handle(tele.OnText, h.handleText)
 
-	// Generic callback handler for ALL callbacks
-	// This handles both dynamic buttons (day_*, page_*) and specific buttons (by Unique)
+	// Specific button handlers (for buttons with Unique field)
+	// Must be registered BEFORE OnCallback to catch their callbacks first
+	h.bot.Handle(&btnViewDays, h.handleViewDays)
+	h.bot.Handle(&btnRandomPair, h.handleRandomPair)
+	h.bot.Handle(&btnCancel, h.handleCancel)
+	h.bot.Handle(&btnMore, h.handleRandomPair)
+	h.bot.Handle(&btnBack, h.handleStart)
+	h.bot.Handle(&btnBackToDays, h.handleViewDays)
+	h.bot.Handle(&btnMainMenu, h.handleStart)
+
+	// Generic callback handler for dynamic buttons (day_*, page_*)
+	// Registered LAST to catch callbacks not handled by specific handlers
 	h.bot.Handle(tele.OnCallback, h.handleCallback)
 }
 
