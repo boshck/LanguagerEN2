@@ -41,15 +41,8 @@ func (h *Handler) handleStart(c tele.Context) error {
 	// Edit message if callback, send new if command
 	if c.Callback() != nil {
 		if err := c.Edit(text, markup); err != nil {
-			// Log the error to understand why Edit failed
-			h.logger.Warn("Failed to edit message, sending new",
-				zap.Error(err),
-				zap.Int64("user_id", userID),
-				zap.String("callback_id", c.Callback().ID),
-			)
-			// Always acknowledge callback before sending new message
-			if ackErr := c.Respond(); ackErr != nil {
-				h.logger.Warn("Failed to acknowledge callback", zap.Error(ackErr))
+			if handleErr := h.handleEditError(err, c, userID); handleErr == nil {
+				return nil // Message was already modified, just acknowledged
 			}
 			return c.Send(text, markup)
 		}

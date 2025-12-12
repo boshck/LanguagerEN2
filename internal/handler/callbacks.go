@@ -21,6 +21,38 @@ func cleanCallbackData(data string) string {
 	}, strings.TrimSpace(data))
 }
 
+// handleEditError handles errors from c.Edit() - if message is not modified, just acknowledge callback
+// Otherwise, acknowledge callback and return error so caller can send new message
+func (h *Handler) handleEditError(err error, c tele.Context, userID int64) error {
+	if err == nil {
+		return nil
+	}
+	
+	errStr := err.Error()
+	// If message is not modified, it means it was already edited by another callback
+	// Just acknowledge and return nil - don't send new message
+	if strings.Contains(errStr, "message is not modified") {
+		h.logger.Debug("Message already modified by another callback, acknowledging",
+			zap.Int64("user_id", userID),
+			zap.String("callback_id", c.Callback().ID),
+		)
+		c.Respond()
+		return nil
+	}
+	
+	// Log the error to understand why Edit failed
+	h.logger.Warn("Failed to edit message, sending new",
+		zap.Error(err),
+		zap.Int64("user_id", userID),
+		zap.String("callback_id", c.Callback().ID),
+	)
+	// Always acknowledge callback before sending new message
+	if ackErr := c.Respond(); ackErr != nil {
+		h.logger.Warn("Failed to acknowledge callback", zap.Error(ackErr))
+	}
+	return err
+}
+
 // handleCallback handles ALL callback queries
 func (h *Handler) handleCallback(c tele.Context) error {
 	callback := c.Callback()
@@ -126,15 +158,8 @@ func (h *Handler) handleViewDays(c tele.Context) error {
 	// Edit message if callback, send new if command
 	if c.Callback() != nil {
 		if err := c.Edit(text, markup); err != nil {
-			// Log the error to understand why Edit failed
-			h.logger.Warn("Failed to edit message, sending new",
-				zap.Error(err),
-				zap.Int64("user_id", userID),
-				zap.String("callback_id", c.Callback().ID),
-			)
-			// Always acknowledge callback before sending new message
-			if ackErr := c.Respond(); ackErr != nil {
-				h.logger.Warn("Failed to acknowledge callback", zap.Error(ackErr))
+			if handleErr := h.handleEditError(err, c, userID); handleErr == nil {
+				return nil // Message was already modified, just acknowledged
 			}
 			return c.Send(text, markup)
 		}
@@ -183,15 +208,8 @@ func (h *Handler) handleRandomPair(c tele.Context) error {
 	// Edit message if callback, send new if command
 	if c.Callback() != nil {
 		if err := c.Edit(text, markup); err != nil {
-			// Log the error to understand why Edit failed
-			h.logger.Warn("Failed to edit message, sending new",
-				zap.Error(err),
-				zap.Int64("user_id", userID),
-				zap.String("callback_id", c.Callback().ID),
-			)
-			// Always acknowledge callback before sending new message
-			if ackErr := c.Respond(); ackErr != nil {
-				h.logger.Warn("Failed to acknowledge callback", zap.Error(ackErr))
+			if handleErr := h.handleEditError(err, c, userID); handleErr == nil {
+				return nil // Message was already modified, just acknowledged
 			}
 			return c.Send(text, markup)
 		}
@@ -210,15 +228,8 @@ func (h *Handler) handleCancel(c tele.Context) error {
 		"🏠 Главное меню\n\nВыберите действие:",
 		mainMenuMarkup(),
 	); err != nil {
-		// Log the error to understand why Edit failed
-		h.logger.Warn("Failed to edit message, sending new",
-			zap.Error(err),
-			zap.Int64("user_id", userID),
-			zap.String("callback_id", c.Callback().ID),
-		)
-		// Always acknowledge callback before sending new message
-		if ackErr := c.Respond(); ackErr != nil {
-			h.logger.Warn("Failed to acknowledge callback", zap.Error(ackErr))
+		if handleErr := h.handleEditError(err, c, userID); handleErr == nil {
+			return nil // Message was already modified, just acknowledged
 		}
 		return c.Send("🏠 Главное меню\n\nВыберите действие:", mainMenuMarkup())
 	}
@@ -278,15 +289,8 @@ func (h *Handler) handlePagination(c tele.Context, data string) error {
 	markup.Inline(rows...)
 
 	if err := c.Edit(text, markup); err != nil {
-		// Log the error to understand why Edit failed
-		h.logger.Warn("Failed to edit message, sending new",
-			zap.Error(err),
-			zap.Int64("user_id", userID),
-			zap.String("callback_id", c.Callback().ID),
-		)
-		// Always acknowledge callback before sending new message
-		if ackErr := c.Respond(); ackErr != nil {
-			h.logger.Warn("Failed to acknowledge callback", zap.Error(ackErr))
+		if handleErr := h.handleEditError(err, c, userID); handleErr == nil {
+			return nil // Message was already modified, just acknowledged
 		}
 		return c.Send(text, markup)
 	}
@@ -324,15 +328,8 @@ func (h *Handler) handleDaySelection(c tele.Context, data string) error {
 	)
 
 	if err := c.Edit(text, markup); err != nil {
-		// Log the error to understand why Edit failed
-		h.logger.Warn("Failed to edit message, sending new",
-			zap.Error(err),
-			zap.Int64("user_id", userID),
-			zap.String("callback_id", c.Callback().ID),
-		)
-		// Always acknowledge callback before sending new message
-		if ackErr := c.Respond(); ackErr != nil {
-			h.logger.Warn("Failed to acknowledge callback", zap.Error(ackErr))
+		if handleErr := h.handleEditError(err, c, userID); handleErr == nil {
+			return nil // Message was already modified, just acknowledged
 		}
 		return c.Send(text, markup)
 	}
