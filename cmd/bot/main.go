@@ -15,7 +15,7 @@ import (
 	"languager/internal/service"
 
 	"github.com/golang-migrate/migrate/v4"
-	"github.com/golang-migrate/migrate/v4/database/postgres"
+	postgresdb "github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 	_ "github.com/lib/pq"
 	"go.uber.org/zap"
@@ -153,7 +153,7 @@ func connectDatabase(dsn string, logger *zap.Logger) (*sql.DB, error) {
 
 // runMigrations runs database migrations
 func runMigrations(db *sql.DB, logger *zap.Logger) error {
-	driver, err := postgres.WithInstance(db, &postgres.Config{})
+	driver, err := postgresdb.WithInstance(db, &postgresdb.Config{})
 	if err != nil {
 		return fmt.Errorf("failed to create migration driver: %w", err)
 	}
