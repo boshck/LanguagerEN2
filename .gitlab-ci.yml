@@ -86,6 +86,7 @@ deploy:
   script:
     - cd /opt/LanguagerEN2
     - echo "🚀 Деплой PROD бота..."
+    - git pull
     - docker compose down || true
     - docker compose up -d --build
     - echo "GO"
