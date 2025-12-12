@@ -1,0 +1,10 @@
+.env
+.git/
+.gitignore
+backups/
+*.md
+.idea/
+.vscode/
+*.db
+vendor/
+
