@@ -79,7 +79,8 @@ build:
     - echo "Pushing to GitLab Container Registry..."
     - docker push $DOCKER_TAG_COMMIT
     - docker push $DOCKER_TAG_LATEST
-    - echo "Image pushed: $DOCKER_TAG_COMMIT"
+    - echo 'Image pushed:' $DOCKER_TAG_COMMIT
+
 
 ##############################################
 # STAGE 3: DEPLOY
@@ -101,7 +102,7 @@ deploy:
     - ssh-keyscan -H $SERVER_HOST >> ~/.ssh/known_hosts
   script:
     - echo "Deploying to server $SERVER_HOST..."
-    - echo "Deploy path: $DEPLOY_PATH"
+    - echo 'Deploy path:' $DEPLOY_PATH
     - scp scripts/deploy.sh ${SERVER_USER}@${SERVER_HOST}:${DEPLOY_PATH}/
     - scp scripts/health_check.sh ${SERVER_USER}@${SERVER_HOST}:${DEPLOY_PATH}/
     - ssh ${SERVER_USER}@${SERVER_HOST} "cd /opt/LanguagerEN2 && chmod +x deploy.sh health_check.sh && export DOCKER_IMAGE=${DOCKER_TAG_COMMIT} && export CI_REGISTRY=${CI_REGISTRY} && export CI_REGISTRY_USER=${CI_REGISTRY_USER} && export CI_REGISTRY_PASSWORD=${CI_REGISTRY_PASSWORD} && ./deploy.sh"
