@@ -40,14 +40,42 @@ func NewHandler(
 
 // RegisterHandlers registers all bot handlers
 func (h *Handler) RegisterHandlers() {
+	// Add middleware to log ALL updates
+	h.bot.Use(func(next tele.HandlerFunc) tele.HandlerFunc {
+		return func(c tele.Context) error {
+			callback := c.Callback()
+			if callback != nil {
+				h.logger.Info("UPDATE: CallbackQuery received",
+					zap.String("data", callback.Data),
+					zap.String("id", callback.ID),
+					zap.String("unique", callback.Unique),
+					zap.Int64("user_id", c.Sender().ID),
+				)
+			} else if c.Message() != nil {
+				h.logger.Info("UPDATE: Message received",
+					zap.String("text", c.Message().Text),
+					zap.Int64("user_id", c.Sender().ID),
+				)
+			} else {
+				h.logger.Info("UPDATE: Other update type",
+					zap.Int64("user_id", c.Sender().ID),
+				)
+			}
+			return next(c)
+		}
+	})
+
 	// Commands
 	h.bot.Handle("/start", h.handleStart)
 
 	// Text messages
 	h.bot.Handle(tele.OnText, h.handleText)
 
+	// Generic callback handler for ALL callbacks - MUST BE FIRST!
+	h.bot.Handle(tele.OnCallback, h.handleCallback)
+
 	// Specific button handlers (for buttons with Unique field)
-	// Must be registered BEFORE OnCallback to catch their callbacks first
+	// These should not be needed if handleCallback routes correctly
 	h.bot.Handle(&btnViewDays, h.handleViewDays)
 	h.bot.Handle(&btnRandomPair, h.handleRandomPair)
 	h.bot.Handle(&btnCancel, h.handleCancel)
@@ -55,10 +83,6 @@ func (h *Handler) RegisterHandlers() {
 	h.bot.Handle(&btnBack, h.handleStart)
 	h.bot.Handle(&btnBackToDays, h.handleViewDays)
 	h.bot.Handle(&btnMainMenu, h.handleStart)
-
-	// Generic callback handler for dynamic buttons (day_*, page_*)
-	// Registered LAST to catch callbacks not handled by specific handlers
-	h.bot.Handle(tele.OnCallback, h.handleCallback)
 }
 
 // GetState returns user's current state
