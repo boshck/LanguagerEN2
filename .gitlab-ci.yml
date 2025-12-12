@@ -31,6 +31,8 @@ test:
   tags:
     - runner
   before_script:
+    # Clean up old Go modules if they exist
+    - rm -rf .go || true
     - go version
   script:
     - echo "Running tests..."
@@ -45,6 +47,10 @@ test:
         echo "Coverage ${coverage}% is below minimum 25%"
         exit 1
       fi
+  after_script:
+    # Clean up Go modules with proper permissions
+    - chmod -R u+w .go 2>/dev/null || true
+    - rm -rf .go || true
   coverage: '/total:\s+\(statements\)\s+(\d+\.\d+)%/'
   artifacts:
     paths:
