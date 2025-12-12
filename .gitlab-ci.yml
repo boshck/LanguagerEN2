@@ -104,23 +104,9 @@ deploy:
   script:
     - echo "Deploying to server $SERVER_HOST..."
     - echo "Deploy path: $DEPLOY_PATH"
-    
-    # Copy deployment scripts to server
     - scp scripts/deploy.sh ${SERVER_USER}@${SERVER_HOST}:${DEPLOY_PATH}/
     - scp scripts/health_check.sh ${SERVER_USER}@${SERVER_HOST}:${DEPLOY_PATH}/
-    
-    # Execute deployment on server
-    - |
-      ssh ${SERVER_USER}@${SERVER_HOST} "
-        cd /opt/LanguagerEN2 || exit 1
-        echo 'Current directory:' \$(pwd)
-        chmod +x deploy.sh health_check.sh
-        export DOCKER_IMAGE=${DOCKER_TAG_COMMIT}
-        export CI_REGISTRY=${CI_REGISTRY}
-        export CI_REGISTRY_USER=${CI_REGISTRY_USER}
-        export CI_REGISTRY_PASSWORD=${CI_REGISTRY_PASSWORD}
-        ./deploy.sh
-      "
+    - ssh ${SERVER_USER}@${SERVER_HOST} "cd /opt/LanguagerEN2 && chmod +x deploy.sh health_check.sh && export DOCKER_IMAGE=${DOCKER_TAG_COMMIT} && export CI_REGISTRY=${CI_REGISTRY} && export CI_REGISTRY_USER=${CI_REGISTRY_USER} && export CI_REGISTRY_PASSWORD=${CI_REGISTRY_PASSWORD} && ./deploy.sh"
   environment:
     name: production
     url: https://t.me/your_bot_username
