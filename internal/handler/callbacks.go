@@ -4,11 +4,21 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
-	"sync"
+	"unicode"
 
 	"go.uber.org/zap"
 	tele "gopkg.in/telebot.v3"
 )
+
+// cleanCallbackData removes all non-printable characters from callback data
+func cleanCallbackData(data string) string {
+	return strings.Map(func(r rune) rune {
+		if unicode.IsPrint(r) {
+			return r
+		}
+		return -1
+	}, strings.TrimSpace(data))
+}
 
 // handleCallback handles ALL callback queries
 func (h *Handler) handleCallback(c tele.Context) error {
@@ -18,7 +28,8 @@ func (h *Handler) handleCallback(c tele.Context) error {
 		return nil
 	}
 
-	data := strings.TrimSpace(callback.Data) // Trim whitespace and control characters
+	// Clean data from all non-printable characters
+	data := cleanCallbackData(callback.Data)
 	h.logger.Info("handleCallback: Processing callback",
 		zap.String("data", data),
 		zap.String("data_raw", callback.Data),
@@ -27,7 +38,7 @@ func (h *Handler) handleCallback(c tele.Context) error {
 		zap.Int64("user_id", c.Sender().ID),
 	)
 
-	// Handle specific button callbacks by Unique or Data
+	// Handle specific button callbacks by Unique first
 	switch callback.Unique {
 	case "view_days", "back_to_days":
 		return h.handleViewDays(c)
@@ -39,8 +50,21 @@ func (h *Handler) handleCallback(c tele.Context) error {
 		return h.handleStart(c)
 	}
 
-	// Handle by Data if Unique is empty (dynamic buttons)
-	// Trim data to remove any control characters
+	// If Unique is empty, try to handle by Data (for buttons with Unique that didn't come through)
+	if callback.Unique == "" {
+		switch data {
+		case "view_days", "back_to_days":
+			return h.handleViewDays(c)
+		case "random_pair", "more":
+			return h.handleRandomPair(c)
+		case "cancel":
+			return h.handleCancel(c)
+		case "back", "main_menu":
+			return h.handleStart(c)
+		}
+	}
+
+	// Handle by Data prefix (dynamic buttons)
 	switch {
 	case strings.HasPrefix(data, "page_"):
 		return h.handlePagination(c, data)
@@ -101,10 +125,7 @@ func (h *Handler) handleViewDays(c tele.Context) error {
 	// Edit message if callback, send new if command
 	if c.Callback() != nil {
 		if err := c.Edit(text, markup); err != nil {
-			// If can't edit (message too old), acknowledge callback first, then send new
-			if ackErr := c.Respond(); ackErr != nil {
-				h.logger.Warn("Failed to acknowledge callback", zap.Error(ackErr))
-			}
+			// If can't edit (message too old), send new
 			return c.Send(text, markup)
 		}
 		return c.Respond()
@@ -116,37 +137,17 @@ func (h *Handler) handleViewDays(c tele.Context) error {
 func (h *Handler) handleRandomPair(c tele.Context) error {
 	userID := c.Sender().ID
 
-	// Get or create lock for this user to prevent concurrent processing
-	h.callbackMux.Lock()
-	lock, exists := h.callbackLocks[userID]
-	if !exists {
-		lock = &sync.Mutex{}
-		h.callbackLocks[userID] = lock
-	}
-	h.callbackMux.Unlock()
-
-	lock.Lock()
-	defer lock.Unlock()
-
 	word, err := h.wordService.GetRandomPair(userID)
 	if err != nil {
 		h.logger.Error("Failed to get random word", zap.Error(err))
-		// Always acknowledge callback before returning error
-		if c.Callback() != nil {
-			c.Respond(&tele.CallbackResponse{Text: "Ошибка при загрузке"})
-		}
-		return err
+		return c.Respond(&tele.CallbackResponse{Text: "Ошибка при загрузке"})
 	}
 
 	if word == nil {
-		// Always acknowledge callback before returning
-		if c.Callback() != nil {
-			return c.Respond(&tele.CallbackResponse{
-				Text:      "У тебя пока нет сохранённых слов",
-				ShowAlert: true,
-			})
-		}
-		return nil
+		return c.Respond(&tele.CallbackResponse{
+			Text:      "У тебя пока нет сохранённых слов",
+			ShowAlert: true,
+		})
 	}
 
 	text := fmt.Sprintf("🎲 Случайная пара:\n\n📝 %s\n🔄 %s", word.Word, word.Translation)
@@ -160,10 +161,7 @@ func (h *Handler) handleRandomPair(c tele.Context) error {
 	// Edit message if callback, send new if command
 	if c.Callback() != nil {
 		if err := c.Edit(text, markup); err != nil {
-			// If can't edit (message too old), acknowledge callback first, then send new
-			if ackErr := c.Respond(); ackErr != nil {
-				h.logger.Warn("Failed to acknowledge callback", zap.Error(ackErr))
-			}
+			// If can't edit (message too old), send new
 			return c.Send(text, markup)
 		}
 		return c.Respond()
@@ -181,11 +179,7 @@ func (h *Handler) handleCancel(c tele.Context) error {
 		"🏠 Главное меню\n\nВыберите действие:",
 		mainMenuMarkup(),
 	); err != nil {
-		// If can't edit (message too old), acknowledge callback first, then send new
-		if ackErr := c.Respond(); ackErr != nil {
-			h.logger.Warn("Failed to acknowledge callback", zap.Error(ackErr))
-		}
-		return c.Send("🏠 Главное меню\n\nВыберите действие:", mainMenuMarkup())
+		return err
 	}
 	return c.Respond()
 }

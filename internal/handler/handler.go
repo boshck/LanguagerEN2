@@ -20,10 +20,6 @@ type Handler struct {
 	// User states (in-memory state machine)
 	states   map[int64]*domain.StateData
 	stateMux sync.RWMutex
-
-	// Callback processing locks per user (prevents race conditions)
-	callbackLocks map[int64]*sync.Mutex
-	callbackMux   sync.RWMutex
 }
 
 // NewHandler creates a new handler instance
@@ -34,12 +30,11 @@ func NewHandler(
 	logger *zap.Logger,
 ) *Handler {
 	return &Handler{
-		bot:           bot,
-		authService:   authService,
-		wordService:   wordService,
-		logger:        logger,
-		states:        make(map[int64]*domain.StateData),
-		callbackLocks: make(map[int64]*sync.Mutex),
+		bot:         bot,
+		authService: authService,
+		wordService: wordService,
+		logger:      logger,
+		states:      make(map[int64]*domain.StateData),
 	}
 }
 
@@ -76,7 +71,7 @@ func (h *Handler) RegisterHandlers() {
 	// Text messages
 	h.bot.Handle(tele.OnText, h.handleText)
 
-	// Generic callback handler for ALL callbacks - MUST BE FIRST!
+	// Generic callback handler for ALL callbacks
 	h.bot.Handle(tele.OnCallback, h.handleCallback)
 }
 
