@@ -80,8 +80,6 @@ build:
     - docker push $DOCKER_TAG_COMMIT
     - docker push $DOCKER_TAG_LATEST
     - echo "Image pushed: $DOCKER_TAG_COMMIT"
-  only:
-    - private
 
 ##############################################
 # STAGE 3: DEPLOY
@@ -110,7 +108,5 @@ deploy:
   environment:
     name: production
     url: https://t.me/your_bot_username
-  only:
-    - private
   when: manual  # Require manual approval for deploy
 
