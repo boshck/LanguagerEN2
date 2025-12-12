@@ -20,6 +20,10 @@ type Handler struct {
 	// User states (in-memory state machine)
 	states   map[int64]*domain.StateData
 	stateMux sync.RWMutex
+
+	// Callback processing locks per user (prevents race conditions)
+	callbackLocks map[int64]*sync.Mutex
+	callbackMux   sync.RWMutex
 }
 
 // NewHandler creates a new handler instance
@@ -30,11 +34,12 @@ func NewHandler(
 	logger *zap.Logger,
 ) *Handler {
 	return &Handler{
-		bot:         bot,
-		authService: authService,
-		wordService: wordService,
-		logger:      logger,
-		states:      make(map[int64]*domain.StateData),
+		bot:           bot,
+		authService:   authService,
+		wordService:   wordService,
+		logger:        logger,
+		states:        make(map[int64]*domain.StateData),
+		callbackLocks: make(map[int64]*sync.Mutex),
 	}
 }
 
@@ -73,16 +78,6 @@ func (h *Handler) RegisterHandlers() {
 
 	// Generic callback handler for ALL callbacks - MUST BE FIRST!
 	h.bot.Handle(tele.OnCallback, h.handleCallback)
-
-	// Specific button handlers (for buttons with Unique field)
-	// These should not be needed if handleCallback routes correctly
-	h.bot.Handle(&btnViewDays, h.handleViewDays)
-	h.bot.Handle(&btnRandomPair, h.handleRandomPair)
-	h.bot.Handle(&btnCancel, h.handleCancel)
-	h.bot.Handle(&btnMore, h.handleRandomPair)
-	h.bot.Handle(&btnBack, h.handleStart)
-	h.bot.Handle(&btnBackToDays, h.handleViewDays)
-	h.bot.Handle(&btnMainMenu, h.handleStart)
 }
 
 // GetState returns user's current state
