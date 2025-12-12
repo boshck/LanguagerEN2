@@ -1,8 +1,5 @@
 # GitLab CI/CD Pipeline for Languager Bot
 
-# Default Docker image
-image: golang:1.21
-
 stages:
   - test
   - build
@@ -63,9 +60,6 @@ test:
 
 build:
   stage: build
-  image: docker:latest
-  services:
-    - docker:dind
   tags:
     - runner
   before_script:
@@ -85,12 +79,9 @@ build:
 
 deploy:
   stage: deploy
-  image: alpine:latest
   tags:
     - runner
   before_script:
-    # Install SSH client
-    - apk add --no-cache openssh-client
     # Setup SSH
     - eval $(ssh-agent -s)
     - echo "$SSH_PRIVATE_KEY" | tr -d '\r' | ssh-add -
