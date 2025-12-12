@@ -180,7 +180,10 @@ func (h *Handler) handlePagination(c tele.Context, data string) error {
 
 	markup.Inline(rows...)
 
-	return c.Edit(text, markup)
+	if err := c.Edit(text, markup); err != nil {
+		return err
+	}
+	return c.Respond()
 }
 
 // handleDaySelection shows words for selected day
@@ -211,6 +214,9 @@ func (h *Handler) handleDaySelection(c tele.Context, data string) error {
 		markup.Row(btnBackToDays, btnMainMenu),
 	)
 
-	return c.Edit(text, markup)
+	if err := c.Edit(text, markup); err != nil {
+		return err
+	}
+	return c.Respond()
 }
 

@@ -68,5 +68,5 @@ deploy:
   environment:
     name: production
     url: https://t.me/your_bot_username
-  when: manual  # Require manual approval for deploy
+#  when: manual  # Require manual approval for deploy
 
