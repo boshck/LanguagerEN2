@@ -1,9 +1,16 @@
 #!/bin/bash
 set -e
 
+# Ensure we're in the project directory
+cd /opt/LanguagerEN2 || {
+    echo "ERROR: Cannot change to /opt/LanguagerEN2"
+    exit 1
+}
+
 echo "========================================"
 echo "  Languager Bot Deployment Script"
 echo "========================================"
+echo "Current directory: $(pwd)"
 echo ""
 
 # Configuration

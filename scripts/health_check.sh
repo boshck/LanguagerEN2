@@ -2,11 +2,18 @@
 
 # Health check script for Languager Bot
 
+# Ensure we're in the project directory
+cd /opt/LanguagerEN2 || {
+    echo "ERROR: Cannot change to /opt/LanguagerEN2"
+    exit 1
+}
+
 SERVICE_NAME="languager_bot"
 MAX_RETRIES=5
 RETRY_DELAY=2
 
 echo "Running health check for $SERVICE_NAME..."
+echo "Current directory: $(pwd)"
 
 # Check if container is running
 if ! docker ps --format '{{.Names}}' | grep -q "^${SERVICE_NAME}$"; then
