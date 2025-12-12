@@ -2,15 +2,9 @@
 
 stages:
   - test
-  - build
   - deploy
 
 variables:
-  # Docker image and registry
-  DOCKER_IMAGE: $CI_REGISTRY_IMAGE
-  DOCKER_TAG_LATEST: $CI_REGISTRY_IMAGE:latest
-  DOCKER_TAG_COMMIT: $CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA
-  
   # Go configuration
   GO_VERSION: "1.21"
   
@@ -55,26 +49,7 @@ test:
     expire_in: 30 days
 
 ##############################################
-# STAGE 2: BUILD & PUSH
-##############################################
-
-build:
-  stage: build
-  tags:
-    - runner
-  before_script:
-    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
-  script:
-    - echo "Building Docker image..."
-    - docker build -t $DOCKER_TAG_COMMIT -t $DOCKER_TAG_LATEST .
-    - echo "Pushing to GitLab Container Registry..."
-    - docker push $DOCKER_TAG_COMMIT
-    - docker push $DOCKER_TAG_LATEST
-    - echo 'Image pushed:' $DOCKER_TAG_COMMIT
-
-
-##############################################
-# STAGE 3: DEPLOY
+# STAGE 2: DEPLOY
 ##############################################
 
 deploy:
@@ -85,6 +60,7 @@ deploy:
     - runner
   script:
     - cd /opt/LanguagerEN2
+    - git pull origin private
     - echo "🚀 Деплой PROD бота..."
     - docker compose down || true
     - docker compose up -d --build
