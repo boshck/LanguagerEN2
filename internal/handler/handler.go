@@ -52,6 +52,8 @@ func (h *Handler) RegisterHandlers() {
 	h.bot.Handle(&btnCancel, h.handleCancel)
 	h.bot.Handle(&btnMore, h.handleRandomPair)
 	h.bot.Handle(&btnBack, h.handleStart)
+	h.bot.Handle(&btnBackToDays, h.handleViewDays)
+	h.bot.Handle(&btnMainMenu, h.handleStart)
 
 	// Generic callback handler for dynamic data
 	h.bot.Handle(tele.OnCallback, h.handleCallback)
@@ -102,6 +104,14 @@ var (
 	btnBack = tele.Btn{
 		Unique: "back",
 		Text:   "🏠 Назад",
+	}
+	btnBackToDays = tele.Btn{
+		Unique: "back_to_days",
+		Text:   "◀️ К дням",
+	}
+	btnMainMenu = tele.Btn{
+		Unique: "main_menu",
+		Text:   "🏠 Главное меню",
 	}
 )
 

@@ -207,7 +207,9 @@ func (h *Handler) handleDaySelection(c tele.Context, data string) error {
 	}
 
 	markup := &tele.ReplyMarkup{}
-	markup.Inline(markup.Row(btnBack))
+	markup.Inline(
+		markup.Row(btnBackToDays, btnMainMenu),
+	)
 
 	return c.Edit(text, markup)
 }
