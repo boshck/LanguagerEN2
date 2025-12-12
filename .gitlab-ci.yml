@@ -79,19 +79,16 @@ build:
 
 deploy:
   stage: deploy
+  only:
+    - private
   tags:
     - runner
-  before_script:
-    # Setup SSH (using runner's existing SSH keys)
-    - mkdir -p ~/.ssh
-    - chmod 700 ~/.ssh
-    - ssh-keyscan -H $SERVER_HOST >> ~/.ssh/known_hosts 2>/dev/null || true
   script:
-    - echo "Deploying to server $SERVER_HOST..."
-    - echo 'Deploy path:' $DEPLOY_PATH
-    - scp scripts/deploy.sh ${SERVER_USER}@${SERVER_HOST}:${DEPLOY_PATH}/
-    - scp scripts/health_check.sh ${SERVER_USER}@${SERVER_HOST}:${DEPLOY_PATH}/
-    - ssh ${SERVER_USER}@${SERVER_HOST} "cd /opt/LanguagerEN2 && chmod +x deploy.sh health_check.sh && export DOCKER_IMAGE=${DOCKER_TAG_COMMIT} && export CI_REGISTRY=${CI_REGISTRY} && export CI_REGISTRY_USER=${CI_REGISTRY_USER} && export CI_REGISTRY_PASSWORD=${CI_REGISTRY_PASSWORD} && ./deploy.sh"
+    - cd /opt/LanguagerEN2
+    - echo "🚀 Деплой PROD бота..."
+    - docker compose down || true
+    - docker compose up -d --build
+    - echo "GO"
   environment:
     name: production
     url: https://t.me/your_bot_username
