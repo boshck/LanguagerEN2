@@ -31,11 +31,9 @@ cache:
 
 test:
   stage: test
-  image: golang:${GO_VERSION}-alpine
   tags:
     - runner
   before_script:
-    - apk add --no-cache git make gcc musl-dev
     - go version
   script:
     - echo "Running tests..."
@@ -66,9 +64,6 @@ test:
 
 build:
   stage: build
-  image: docker:24-git
-  services:
-    - docker:24-dind
   tags:
     - runner
   before_script:
@@ -88,12 +83,9 @@ build:
 
 deploy:
   stage: deploy
-  image: alpine:latest
   tags:
     - runner
   before_script:
-    # Install SSH and other tools
-    - apk add --no-cache openssh-client bash
     # Setup SSH
     - eval $(ssh-agent -s)
     - echo "$SSH_PRIVATE_KEY" | tr -d '\r' | ssh-add -
