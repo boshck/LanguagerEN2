@@ -70,3 +70,13 @@ func (s *WordService) GetWordsByDate(userID int64, dateStr string) ([]domain.Wor
 	return s.wordRepo.GetWordsByDate(userID, date)
 }
 
+// HideWordFor7Days hides a word from random pair for 7 days
+func (s *WordService) HideWordFor7Days(wordID int) error {
+	return s.wordRepo.HideWordFor7Days(wordID)
+}
+
+// HideWordForever permanently hides a word from random pair
+func (s *WordService) HideWordForever(wordID int) error {
+	return s.wordRepo.HideWordForever(wordID)
+}
+

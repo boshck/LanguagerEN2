@@ -28,17 +28,21 @@ func (r *WordRepo) SaveWord(userID int64, word, translation string) error {
 }
 
 // GetRandomWord returns a random word for the user
+// Excludes words that are hidden forever or hidden until a future date
 func (r *WordRepo) GetRandomWord(userID int64) (*domain.Word, error) {
 	var w domain.Word
+	var hiddenUntil sql.NullTime
 	query := `
-		SELECT id, user_id, word, translation, created_at
+		SELECT id, user_id, word, translation, created_at, hidden_until, hidden_forever
 		FROM words
 		WHERE user_id = $1
+			AND (hidden_forever = FALSE OR hidden_forever IS NULL)
+			AND (hidden_until IS NULL OR hidden_until <= NOW())
 		ORDER BY RANDOM()
 		LIMIT 1
 	`
 	err := r.db.QueryRow(query, userID).Scan(
-		&w.ID, &w.UserID, &w.Word, &w.Translation, &w.CreatedAt,
+		&w.ID, &w.UserID, &w.Word, &w.Translation, &w.CreatedAt, &hiddenUntil, &w.HiddenForever,
 	)
 
 	if err == sql.ErrNoRows {
@@ -46,6 +50,10 @@ func (r *WordRepo) GetRandomWord(userID int64) (*domain.Word, error) {
 	}
 	if err != nil {
 		return nil, err
+	}
+
+	if hiddenUntil.Valid {
+		w.HiddenUntil = &hiddenUntil.Time
 	}
 
 	return &w, nil
@@ -96,7 +104,7 @@ func (r *WordRepo) GetTotalDaysCount(userID int64) (int, error) {
 // GetWordsByDate returns all words for a specific date
 func (r *WordRepo) GetWordsByDate(userID int64, date time.Time) ([]domain.Word, error) {
 	query := `
-		SELECT id, user_id, word, translation, created_at
+		SELECT id, user_id, word, translation, created_at, hidden_until, hidden_forever
 		FROM words
 		WHERE user_id = $1 AND DATE(created_at) = DATE($2)
 		ORDER BY created_at DESC
@@ -111,8 +119,12 @@ func (r *WordRepo) GetWordsByDate(userID int64, date time.Time) ([]domain.Word, 
 	var words []domain.Word
 	for rows.Next() {
 		var w domain.Word
-		if err := rows.Scan(&w.ID, &w.UserID, &w.Word, &w.Translation, &w.CreatedAt); err != nil {
+		var hiddenUntil sql.NullTime
+		if err := rows.Scan(&w.ID, &w.UserID, &w.Word, &w.Translation, &w.CreatedAt, &hiddenUntil, &w.HiddenForever); err != nil {
 			return nil, err
+		}
+		if hiddenUntil.Valid {
+			w.HiddenUntil = &hiddenUntil.Time
 		}
 		words = append(words, w)
 	}
@@ -127,6 +139,28 @@ func (r *WordRepo) CleanOldWords(days int) error {
 		WHERE created_at < NOW() - INTERVAL '1 day' * $1
 	`
 	_, err := r.db.Exec(query, days)
+	return err
+}
+
+// HideWordFor7Days hides a word from random pair for 7 days
+func (r *WordRepo) HideWordFor7Days(wordID int) error {
+	query := `
+		UPDATE words
+		SET hidden_until = NOW() + INTERVAL '7 days'
+		WHERE id = $1
+	`
+	_, err := r.db.Exec(query, wordID)
+	return err
+}
+
+// HideWordForever permanently hides a word from random pair
+func (r *WordRepo) HideWordForever(wordID int) error {
+	query := `
+		UPDATE words
+		SET hidden_forever = TRUE
+		WHERE id = $1
+	`
+	_, err := r.db.Exec(query, wordID)
 	return err
 }
 

@@ -21,5 +21,7 @@ type WordRepository interface {
 	GetWordsByDate(userID int64, date time.Time) ([]domain.Word, error)
 	CleanOldWords(days int) error
 	GetTotalDaysCount(userID int64) (int, error)
+	HideWordFor7Days(wordID int) error
+	HideWordForever(wordID int) error
 }
 

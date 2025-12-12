@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 	"unicode"
 
 	"go.uber.org/zap"
@@ -103,6 +104,14 @@ func (h *Handler) handleCallback(c tele.Context) error {
 		return h.handlePagination(c, data)
 	case strings.HasPrefix(data, "day_"):
 		return h.handleDaySelection(c, data)
+	case strings.HasPrefix(data, "hide_7d_"):
+		return h.handleHideFor7Days(c, data)
+	case strings.HasPrefix(data, "hide_forever_"):
+		return h.handleHideForeverConfirm(c, data)
+	case strings.HasPrefix(data, "confirm_hide_"):
+		return h.handleConfirmHideForever(c, data)
+	case strings.HasPrefix(data, "cancel_hide_"):
+		return h.handleCancelHide(c, data)
 	}
 
 	// If it's not handled, acknowledge it anyway
@@ -202,6 +211,10 @@ func (h *Handler) handleRandomPair(c tele.Context) error {
 	markup := &tele.ReplyMarkup{}
 	markup.Inline(
 		markup.Row(btnMore),
+		markup.Row(
+			markup.Data("💤 Не показывать 7 дней", fmt.Sprintf("hide_7d_%d", word.ID)),
+			markup.Data("♿️ Не показывать никогда", fmt.Sprintf("hide_forever_%d", word.ID)),
+		),
 		markup.Row(btnBack),
 	)
 
@@ -319,7 +332,16 @@ func (h *Handler) handleDaySelection(c tele.Context, data string) error {
 	// Build message with all words
 	text := fmt.Sprintf("📝 Слова за выбранный день (%d):\n\n", len(words))
 	for i, word := range words {
-		text += fmt.Sprintf("%d. %s — %s\n\n", i+1, word.Word, word.Translation)
+		// Determine status emoji
+		var statusEmoji string
+		if word.HiddenForever {
+			statusEmoji = "♿️"
+		} else if word.HiddenUntil != nil && word.HiddenUntil.After(time.Now()) {
+			statusEmoji = "💤"
+		} else {
+			statusEmoji = "💡"
+		}
+		text += fmt.Sprintf("%d. %s %s — %s\n\n", i+1, statusEmoji, word.Word, word.Translation)
 	}
 
 	markup := &tele.ReplyMarkup{}
@@ -334,5 +356,118 @@ func (h *Handler) handleDaySelection(c tele.Context, data string) error {
 		return c.Send(text, markup)
 	}
 	return c.Respond()
+}
+
+// handleHideFor7Days hides a word for 7 days and shows success message with "Ещё" button
+func (h *Handler) handleHideFor7Days(c tele.Context, data string) error {
+	userID := c.Sender().ID
+
+	// Extract word ID
+	data = strings.TrimSpace(data)
+	wordIDStr := strings.TrimPrefix(data, "hide_7d_")
+	wordID, err := strconv.Atoi(wordIDStr)
+	if err != nil {
+		h.logger.Error("Failed to parse word ID", zap.Error(err), zap.String("data", data))
+		return c.Respond(&tele.CallbackResponse{Text: "Ошибка"})
+	}
+
+	// Hide the word
+	if err := h.wordService.HideWordFor7Days(wordID); err != nil {
+		h.logger.Error("Failed to hide word for 7 days", zap.Error(err), zap.Int("word_id", wordID))
+		return c.Respond(&tele.CallbackResponse{Text: "Ошибка при скрытии слова"})
+	}
+
+	// Show success message with "Ещё" button
+	text := "✅ Слово скрыто на 7 дней"
+	markup := &tele.ReplyMarkup{}
+	markup.Inline(markup.Row(btnMore))
+
+	if err := c.Edit(text, markup); err != nil {
+		if handleErr := h.handleEditError(err, c, userID); handleErr == nil {
+			return nil
+		}
+		return c.Send(text, markup)
+	}
+	return c.Respond()
+}
+
+// handleHideForeverConfirm shows confirmation dialog for permanent hiding
+func (h *Handler) handleHideForeverConfirm(c tele.Context, data string) error {
+	userID := c.Sender().ID
+
+	// Extract word ID
+	data = strings.TrimSpace(data)
+	wordIDStr := strings.TrimPrefix(data, "hide_forever_")
+	wordID, err := strconv.Atoi(wordIDStr)
+	if err != nil {
+		h.logger.Error("Failed to parse word ID", zap.Error(err), zap.String("data", data))
+		return c.Respond(&tele.CallbackResponse{Text: "Ошибка"})
+	}
+
+	// Show confirmation message
+	text := "❓ Точно ли хочешь убрать слово из повторения? Его придётся внести ещё раз"
+	markup := &tele.ReplyMarkup{}
+	markup.Inline(
+		markup.Row(
+			markup.Data("✅ Да", fmt.Sprintf("confirm_hide_%d", wordID)),
+			markup.Data("❌ Нет", fmt.Sprintf("cancel_hide_%d", wordID)),
+		),
+	)
+
+	if err := c.Edit(text, markup); err != nil {
+		if handleErr := h.handleEditError(err, c, userID); handleErr == nil {
+			return nil
+		}
+		return c.Send(text, markup)
+	}
+	return c.Respond()
+}
+
+// handleConfirmHideForever permanently hides a word and shows success message with "Ещё" button
+func (h *Handler) handleConfirmHideForever(c tele.Context, data string) error {
+	userID := c.Sender().ID
+
+	// Extract word ID
+	data = strings.TrimSpace(data)
+	wordIDStr := strings.TrimPrefix(data, "confirm_hide_")
+	wordID, err := strconv.Atoi(wordIDStr)
+	if err != nil {
+		h.logger.Error("Failed to parse word ID", zap.Error(err), zap.String("data", data))
+		return c.Respond(&tele.CallbackResponse{Text: "Ошибка"})
+	}
+
+	// Hide the word forever
+	if err := h.wordService.HideWordForever(wordID); err != nil {
+		h.logger.Error("Failed to hide word forever", zap.Error(err), zap.Int("word_id", wordID))
+		return c.Respond(&tele.CallbackResponse{Text: "Ошибка при скрытии слова"})
+	}
+
+	// Show success message with "Ещё" button
+	text := "✅ Слово скрыто навсегда"
+	markup := &tele.ReplyMarkup{}
+	markup.Inline(markup.Row(btnMore))
+
+	if err := c.Edit(text, markup); err != nil {
+		if handleErr := h.handleEditError(err, c, userID); handleErr == nil {
+			return nil
+		}
+		return c.Send(text, markup)
+	}
+	return c.Respond()
+}
+
+// handleCancelHide cancels the hide operation and returns to word display
+func (h *Handler) handleCancelHide(c tele.Context, data string) error {
+	// Extract word ID for logging (though we don't use it to restore the word)
+	data = strings.TrimSpace(data)
+	wordIDStr := strings.TrimPrefix(data, "cancel_hide_")
+	_, err := strconv.Atoi(wordIDStr)
+	if err != nil {
+		h.logger.Error("Failed to parse word ID", zap.Error(err), zap.String("data", data))
+		return c.Respond(&tele.CallbackResponse{Text: "Ошибка"})
+	}
+
+	// Show a new random pair (we don't have GetWordByID method to restore the original word)
+	return h.handleRandomPair(c)
 }
 
