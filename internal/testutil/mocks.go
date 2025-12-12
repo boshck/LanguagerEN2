@@ -71,3 +71,13 @@ func (m *MockWordRepository) GetTotalDaysCount(userID int64) (int, error) {
 	return args.Int(0), args.Error(1)
 }
 
+func (m *MockWordRepository) HideWordFor7Days(wordID int) error {
+	args := m.Called(wordID)
+	return args.Error(0)
+}
+
+func (m *MockWordRepository) HideWordForever(wordID int) error {
+	args := m.Called(wordID)
+	return args.Error(0)
+}
+

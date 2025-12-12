@@ -42,8 +42,8 @@ func TestWordRepo_GetRandomWord(t *testing.T) {
 		{
 			name:   "word found",
 			userID: 123,
-			mockRows: sqlmock.NewRows([]string{"id", "user_id", "word", "translation", "created_at"}).
-				AddRow(1, 123, "hello", "привет", time.Now()),
+			mockRows: sqlmock.NewRows([]string{"id", "user_id", "word", "translation", "created_at", "hidden_until", "hidden_forever"}).
+				AddRow(1, 123, "hello", "привет", time.Now(), nil, false),
 			mockError:     nil,
 			expectedNil:   false,
 			expectedError: false,
@@ -66,7 +66,7 @@ func TestWordRepo_GetRandomWord(t *testing.T) {
 
 			repo := NewWordRepo(db)
 
-			query := "SELECT id, user_id, word, translation, created_at FROM words WHERE user_id = \\$1"
+			query := "SELECT id, user_id, word, translation, created_at, hidden_until, hidden_forever FROM words WHERE user_id = \\$1 AND \\(hidden_forever = FALSE OR hidden_forever IS NULL\\) AND \\(hidden_until IS NULL OR hidden_until <= NOW\\(\\)\\)"
 
 			if tt.mockError != nil {
 				mock.ExpectQuery(query).WithArgs(tt.userID).WillReturnError(tt.mockError)
@@ -153,11 +153,11 @@ func TestWordRepo_GetWordsByDate(t *testing.T) {
 	userID := int64(123)
 	date := time.Now()
 
-	rows := sqlmock.NewRows([]string{"id", "user_id", "word", "translation", "created_at"}).
-		AddRow(1, userID, "hello", "привет", date).
-		AddRow(2, userID, "world", "мир", date)
+	rows := sqlmock.NewRows([]string{"id", "user_id", "word", "translation", "created_at", "hidden_until", "hidden_forever"}).
+		AddRow(1, userID, "hello", "привет", date, nil, false).
+		AddRow(2, userID, "world", "мир", date, nil, false)
 
-	mock.ExpectQuery("SELECT id, user_id, word, translation, created_at FROM words WHERE user_id = \\$1 AND DATE\\(created_at\\) = DATE\\(\\$2\\)").
+	mock.ExpectQuery("SELECT id, user_id, word, translation, created_at, hidden_until, hidden_forever FROM words WHERE user_id = \\$1 AND DATE\\(created_at\\) = DATE\\(\\$2\\)").
 		WithArgs(userID, date).
 		WillReturnRows(rows)
 
@@ -184,6 +184,44 @@ func TestWordRepo_CleanOldWords(t *testing.T) {
 		WillReturnResult(sqlmock.NewResult(0, 10))
 
 	err = repo.CleanOldWords(days)
+
+	assert.NoError(t, err)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestWordRepo_HideWordFor7Days(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	assert.NoError(t, err)
+	defer db.Close()
+
+	repo := NewWordRepo(db)
+
+	wordID := 1
+
+	mock.ExpectExec("UPDATE words SET hidden_until = NOW\\(\\) \\+ INTERVAL '7 days' WHERE id = \\$1").
+		WithArgs(wordID).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+
+	err = repo.HideWordFor7Days(wordID)
+
+	assert.NoError(t, err)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestWordRepo_HideWordForever(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	assert.NoError(t, err)
+	defer db.Close()
+
+	repo := NewWordRepo(db)
+
+	wordID := 1
+
+	mock.ExpectExec("UPDATE words SET hidden_forever = TRUE WHERE id = \\$1").
+		WithArgs(wordID).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+
+	err = repo.HideWordForever(wordID)
 
 	assert.NoError(t, err)
 	assert.NoError(t, mock.ExpectationsWereMet())
