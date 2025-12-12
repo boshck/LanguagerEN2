@@ -238,7 +238,7 @@ func (h *Handler) handleDaySelection(c tele.Context, data string) error {
 	// Build message with all words
 	text := fmt.Sprintf("📝 Слова за выбранный день (%d):\n\n", len(words))
 	for i, word := range words {
-		text += fmt.Sprintf("%d. %s — %s\n", i+1, word.Word, word.Translation)
+		text += fmt.Sprintf("%d. %s — %s\n\n", i+1, word.Word, word.Translation)
 	}
 
 	markup := &tele.ReplyMarkup{}
