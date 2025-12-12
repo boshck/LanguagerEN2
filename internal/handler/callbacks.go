@@ -17,6 +17,7 @@ func (h *Handler) handleCallback(c tele.Context) error {
 	}
 
 	data := callback.Data
+	h.logger.Info("Callback received", zap.String("data", data), zap.Int64("user_id", c.Sender().ID))
 
 	// Handle pagination callbacks
 	if strings.HasPrefix(data, "page_") {
@@ -29,6 +30,7 @@ func (h *Handler) handleCallback(c tele.Context) error {
 	}
 
 	// Acknowledge callback
+	h.logger.Warn("Unhandled callback", zap.String("data", data))
 	return c.Respond()
 }
 
@@ -76,7 +78,10 @@ func (h *Handler) handleViewDays(c tele.Context) error {
 
 	// Edit message if callback, send new if command
 	if c.Callback() != nil {
-		return c.Edit(text, markup)
+		if err := c.Edit(text, markup); err != nil {
+			return err
+		}
+		return c.Respond()
 	}
 	return c.Send(text, markup)
 }
@@ -123,10 +128,13 @@ func (h *Handler) handleCancel(c tele.Context) error {
 
 	h.ResetState(userID)
 
-	return c.Edit(
+	if err := c.Edit(
 		"🏠 Главное меню\n\nВыберите действие:",
 		mainMenuMarkup(),
-	)
+	); err != nil {
+		return err
+	}
+	return c.Respond()
 }
 
 // handlePagination handles page navigation
@@ -192,6 +200,7 @@ func (h *Handler) handleDaySelection(c tele.Context, data string) error {
 
 	// Extract date
 	dateStr := strings.TrimPrefix(data, "day_")
+	h.logger.Info("Handling day selection", zap.String("date", dateStr), zap.Int64("user_id", userID))
 
 	words, err := h.wordService.GetWordsByDate(userID, dateStr)
 	if err != nil {
