@@ -19,6 +19,20 @@ func (h *Handler) handleCallback(c tele.Context) error {
 	data := callback.Data
 	h.logger.Info("Callback received", zap.String("data", data), zap.Int64("user_id", c.Sender().ID))
 
+	// Handle specific button callbacks by Unique
+	switch data {
+	case "view_days":
+		return h.handleViewDays(c)
+	case "random_pair", "more":
+		return h.handleRandomPair(c)
+	case "cancel":
+		return h.handleCancel(c)
+	case "back", "main_menu":
+		return h.handleStart(c)
+	case "back_to_days":
+		return h.handleViewDays(c)
+	}
+
 	// Handle pagination callbacks
 	if strings.HasPrefix(data, "page_") {
 		return h.handlePagination(c, data)
