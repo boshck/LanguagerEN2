@@ -289,3 +289,85 @@ func TestWordService_GetWordsByDate(t *testing.T) {
 	}
 }
 
+func TestWordService_HideWordFor7Days(t *testing.T) {
+	tests := []struct {
+		name          string
+		wordID        int
+		mockError     error
+		expectedError bool
+	}{
+		{
+			name:          "successful hide",
+			wordID:        1,
+			mockError:     nil,
+			expectedError: false,
+		},
+		{
+			name:          "database error",
+			wordID:        2,
+			mockError:     fmt.Errorf("database error"),
+			expectedError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockRepo := new(testutil.MockWordRepository)
+			mockRepo.On("HideWordFor7Days", tt.wordID).Return(tt.mockError)
+
+			service := NewWordService(mockRepo)
+
+			err := service.HideWordFor7Days(tt.wordID)
+
+			if tt.expectedError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+
+			mockRepo.AssertExpectations(t)
+		})
+	}
+}
+
+func TestWordService_HideWordForever(t *testing.T) {
+	tests := []struct {
+		name          string
+		wordID        int
+		mockError     error
+		expectedError bool
+	}{
+		{
+			name:          "successful hide",
+			wordID:        1,
+			mockError:     nil,
+			expectedError: false,
+		},
+		{
+			name:          "database error",
+			wordID:        2,
+			mockError:     fmt.Errorf("database error"),
+			expectedError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockRepo := new(testutil.MockWordRepository)
+			mockRepo.On("HideWordForever", tt.wordID).Return(tt.mockError)
+
+			service := NewWordService(mockRepo)
+
+			err := service.HideWordForever(tt.wordID)
+
+			if tt.expectedError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+
+			mockRepo.AssertExpectations(t)
+		})
+	}
+}
+
