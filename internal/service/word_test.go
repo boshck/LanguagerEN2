@@ -147,20 +147,19 @@ func TestWordService_GetDaysList(t *testing.T) {
 		mockDays          []domain.Day
 		mockTotalDays     int
 		mockError         error
+		mockTotalDaysError error
 		expectedPages     int
 		expectedDaysCount int
 		expectedError     bool
 	}{
 		{
-			name:   "first page with 7 days",
-			userID: 123,
-			page:   1,
-			mockDays: []domain.Day{
-				testutil.NewTestDay(time.Now(), 5),
-				testutil.NewTestDay(time.Now().AddDate(0, 0, -1), 3),
-			},
+			name:              "first page with 7 days",
+			userID:            123,
+			page:              1,
+			mockDays:          []domain.Day{testutil.NewTestDay(time.Now(), 5), testutil.NewTestDay(time.Now().AddDate(0, 0, -1), 3)},
 			mockTotalDays:     14,
 			mockError:         nil,
+			mockTotalDaysError: nil,
 			expectedPages:     2,
 			expectedDaysCount: 2,
 			expectedError:     false,
@@ -172,6 +171,7 @@ func TestWordService_GetDaysList(t *testing.T) {
 			mockDays:          []domain.Day{},
 			mockTotalDays:     7,
 			mockError:         nil,
+			mockTotalDaysError: nil,
 			expectedPages:     1,
 			expectedDaysCount: 0,
 			expectedError:     false,
@@ -183,16 +183,39 @@ func TestWordService_GetDaysList(t *testing.T) {
 			mockDays:          []domain.Day{testutil.NewTestDay(time.Now(), 5)},
 			mockTotalDays:     1,
 			mockError:         nil,
+			mockTotalDaysError: nil,
 			expectedPages:     1,
 			expectedDaysCount: 1,
 			expectedError:     false,
 		},
 		{
-			name:          "database error on days",
-			userID:        123,
-			page:          1,
-			mockError:     fmt.Errorf("db error"),
-			expectedError: true,
+			name:              "database error on days",
+			userID:            123,
+			page:              1,
+			mockError:         fmt.Errorf("db error"),
+			mockTotalDaysError: nil,
+			expectedError:     true,
+		},
+		{
+			name:              "zero total days sets totalPages to 1",
+			userID:            123,
+			page:              1,
+			mockDays:          []domain.Day{},
+			mockTotalDays:     0,
+			mockError:         nil,
+			mockTotalDaysError: nil,
+			expectedPages:     1,
+			expectedDaysCount: 0,
+			expectedError:     false,
+		},
+		{
+			name:              "database error on total count",
+			userID:            123,
+			page:              1,
+			mockDays:          []domain.Day{testutil.NewTestDay(time.Now(), 5)},
+			mockError:          nil,
+			mockTotalDaysError: fmt.Errorf("db error"),
+			expectedError:      true,
 		},
 	}
 
@@ -209,7 +232,11 @@ func TestWordService_GetDaysList(t *testing.T) {
 			mockRepo.On("GetDaysWithWords", tt.userID, 7, offset).Return(tt.mockDays, tt.mockError)
 
 			if tt.mockError == nil {
-				mockRepo.On("GetTotalDaysCount", tt.userID).Return(tt.mockTotalDays, nil)
+				if tt.mockTotalDaysError != nil {
+					mockRepo.On("GetTotalDaysCount", tt.userID).Return(0, tt.mockTotalDaysError)
+				} else {
+					mockRepo.On("GetTotalDaysCount", tt.userID).Return(tt.mockTotalDays, nil)
+				}
 			}
 
 			service := NewWordService(mockRepo)
