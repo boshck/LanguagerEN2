@@ -22,36 +22,30 @@ func cleanCallbackData(data string) string {
 	}, strings.TrimSpace(data))
 }
 
-// handleEditError handles errors from c.Edit() - if message is not modified, just acknowledge callback
-// Otherwise, acknowledge callback and return error so caller can send new message
-func (h *Handler) handleEditError(err error, c tele.Context, userID int64) error {
+// handleEditError handles errors from c.Edit() - просто логирует ошибки
+// Callback уже должен быть подтверждён до вызова этой функции
+func (h *Handler) handleEditError(err error, c tele.Context, userID int64) bool {
 	if err == nil {
-		return nil
+		return false
 	}
 	
 	errStr := err.Error()
 	// If message is not modified, it means it was already edited by another callback
-	// Just acknowledge and return nil - don't send new message
 	if strings.Contains(errStr, "message is not modified") {
-		h.logger.Debug("Message already modified by another callback, acknowledging",
+		h.logger.Debug("Message already modified by another callback",
 			zap.Int64("user_id", userID),
 			zap.String("callback_id", c.Callback().ID),
 		)
-		c.Respond()
-		return nil
+		return true // Уже изменено, это нормально
 	}
 	
-	// Log the error to understand why Edit failed
-	h.logger.Warn("Failed to edit message, sending new",
+	// Log the error
+	h.logger.Warn("Failed to edit message",
 		zap.Error(err),
 		zap.Int64("user_id", userID),
 		zap.String("callback_id", c.Callback().ID),
 	)
-	// Always acknowledge callback before sending new message
-	if ackErr := c.Respond(); ackErr != nil {
-		h.logger.Warn("Failed to acknowledge callback", zap.Error(ackErr))
-	}
-	return err
+	return false // Реальная ошибка
 }
 
 // handleCallback handles ALL callback queries
@@ -126,18 +120,23 @@ func (h *Handler) handleCallback(c tele.Context) error {
 func (h *Handler) handleViewDays(c tele.Context) error {
 	userID := c.Sender().ID
 
+	// КРИТИЧЕСКИ ВАЖНО: Отвечаем на callback СРАЗУ
+	if c.Callback() != nil {
+		if err := c.Respond(); err != nil {
+			h.logger.Warn("Failed to acknowledge callback", zap.Error(err))
+		}
+	}
+
 	// Get first page
 	days, totalPages, err := h.wordService.GetDaysList(userID, 1)
 	if err != nil {
 		h.logger.Error("Failed to get days list", zap.Error(err))
-		return c.Respond(&tele.CallbackResponse{Text: "Ошибка при загрузке данных"})
+		return nil // Callback уже подтверждён
 	}
 
 	if len(days) == 0 {
-		return c.Respond(&tele.CallbackResponse{
-			Text:      "У тебя пока нет сохранённых слов",
-			ShowAlert: true,
-		})
+		// Callback уже подтверждён, ничего не делаем
+		return nil
 	}
 
 	// Build message
@@ -164,16 +163,15 @@ func (h *Handler) handleViewDays(c tele.Context) error {
 
 	markup.Inline(rows...)
 
-	// Edit message if callback, send new if command
+	// Edit message - только edit, никаких send
 	if c.Callback() != nil {
 		if err := c.Edit(text, markup); err != nil {
-			if handleErr := h.handleEditError(err, c, userID); handleErr == nil {
-				return nil // Message was already modified, just acknowledged
-			}
-			return c.Send(text, markup)
+			h.handleEditError(err, c, userID)
+			// Callback уже подтверждён, просто логируем ошибку
 		}
-		return c.Respond()
+		return nil
 	}
+	// Это не callback (например команда), можно отправлять новое
 	return c.Send(text, markup)
 }
 
@@ -181,7 +179,14 @@ func (h *Handler) handleViewDays(c tele.Context) error {
 func (h *Handler) handleRandomPair(c tele.Context) error {
 	userID := c.Sender().ID
 
-	// Get or create lock for this user to prevent concurrent processing
+	// КРИТИЧЕСКИ ВАЖНО: Отвечаем на callback СРАЗУ, до блокировки
+	if c.Callback() != nil {
+		if err := c.Respond(); err != nil {
+			h.logger.Warn("Failed to acknowledge callback immediately", zap.Error(err))
+		}
+	}
+
+	// Получаем или создаём блокировку для этого пользователя
 	h.callbackMux.Lock()
 	lock, exists := h.callbackLocks[userID]
 	if !exists {
@@ -190,20 +195,19 @@ func (h *Handler) handleRandomPair(c tele.Context) error {
 	}
 	h.callbackMux.Unlock()
 
+	// Блокируем обработку для этого пользователя
 	lock.Lock()
 	defer lock.Unlock()
 
 	word, err := h.wordService.GetRandomPair(userID)
 	if err != nil {
 		h.logger.Error("Failed to get random word", zap.Error(err))
-		return c.Respond(&tele.CallbackResponse{Text: "Ошибка при загрузке"})
+		return nil // Callback уже подтверждён
 	}
 
 	if word == nil {
-		return c.Respond(&tele.CallbackResponse{
-			Text:      "У тебя пока нет сохранённых слов",
-			ShowAlert: true,
-		})
+		// Callback уже подтверждён
+		return nil
 	}
 
 	text := fmt.Sprintf("🎲 Случайная пара:\n\n📝 %s\n🔄 %s", word.Word, word.Translation)
@@ -218,16 +222,15 @@ func (h *Handler) handleRandomPair(c tele.Context) error {
 		markup.Row(btnBack),
 	)
 
-	// Edit message if callback, send new if command
+	// Edit message - только edit, никаких send
 	if c.Callback() != nil {
 		if err := c.Edit(text, markup); err != nil {
-			if handleErr := h.handleEditError(err, c, userID); handleErr == nil {
-				return nil // Message was already modified, just acknowledged
-			}
-			return c.Send(text, markup)
+			h.handleEditError(err, c, userID)
+			// Callback уже подтверждён, просто логируем ошибку
 		}
-		return c.Respond()
+		return nil
 	}
+	// Это не callback (например команда), можно отправлять новое
 	return c.Send(text, markup)
 }
 
@@ -235,40 +238,54 @@ func (h *Handler) handleRandomPair(c tele.Context) error {
 func (h *Handler) handleCancel(c tele.Context) error {
 	userID := c.Sender().ID
 
+	// КРИТИЧЕСКИ ВАЖНО: Отвечаем на callback СРАЗУ
+	if c.Callback() != nil {
+		if err := c.Respond(); err != nil {
+			h.logger.Warn("Failed to acknowledge callback", zap.Error(err))
+		}
+	}
+
 	h.ResetState(userID)
 
 	if err := c.Edit(
 		"🏠 Главное меню\n\nВыберите действие:",
 		mainMenuMarkup(),
 	); err != nil {
-		if handleErr := h.handleEditError(err, c, userID); handleErr == nil {
-			return nil // Message was already modified, just acknowledged
-		}
-		return c.Send("🏠 Главное меню\n\nВыберите действие:", mainMenuMarkup())
+		h.handleEditError(err, c, userID)
+		// Callback уже подтверждён, просто логируем ошибку
 	}
-	return c.Respond()
+	return nil
 }
 
 // handlePagination handles page navigation
 func (h *Handler) handlePagination(c tele.Context, data string) error {
 	userID := c.Sender().ID
 
+	// КРИТИЧЕСКИ ВАЖНО: Отвечаем на callback СРАЗУ
+	if c.Callback() != nil {
+		if err := c.Respond(); err != nil {
+			h.logger.Warn("Failed to acknowledge callback", zap.Error(err))
+		}
+	}
+
 	// Extract page number - trim whitespace first
 	data = strings.TrimSpace(data)
 	pageStr := strings.TrimPrefix(data, "page_")
 	page, err := strconv.Atoi(pageStr)
 	if err != nil {
-		return c.Respond(&tele.CallbackResponse{Text: "Неверная страница"})
+		// Callback уже подтверждён, просто возвращаемся
+		return nil
 	}
 
 	days, totalPages, err := h.wordService.GetDaysList(userID, page)
 	if err != nil {
 		h.logger.Error("Failed to get days list", zap.Error(err))
-		return c.Respond(&tele.CallbackResponse{Text: "Ошибка при загрузке"})
+		return nil // Callback уже подтверждён
 	}
 
 	if len(days) == 0 {
-		return c.Respond(&tele.CallbackResponse{Text: "Нет данных"})
+		// Callback уже подтверждён
+		return nil
 	}
 
 	// Build message
@@ -301,18 +318,24 @@ func (h *Handler) handlePagination(c tele.Context, data string) error {
 
 	markup.Inline(rows...)
 
+	// Edit message - только edit, никаких send
 	if err := c.Edit(text, markup); err != nil {
-		if handleErr := h.handleEditError(err, c, userID); handleErr == nil {
-			return nil // Message was already modified, just acknowledged
-		}
-		return c.Send(text, markup)
+		h.handleEditError(err, c, userID)
+		// Callback уже подтверждён, просто логируем ошибку
 	}
-	return c.Respond()
+	return nil
 }
 
 // handleDaySelection shows words for selected day
 func (h *Handler) handleDaySelection(c tele.Context, data string) error {
 	userID := c.Sender().ID
+
+	// КРИТИЧЕСКИ ВАЖНО: Отвечаем на callback СРАЗУ
+	if c.Callback() != nil {
+		if err := c.Respond(); err != nil {
+			h.logger.Warn("Failed to acknowledge callback", zap.Error(err))
+		}
+	}
 
 	// Extract date - trim whitespace first, then remove prefix
 	data = strings.TrimSpace(data)
@@ -322,11 +345,12 @@ func (h *Handler) handleDaySelection(c tele.Context, data string) error {
 	words, err := h.wordService.GetWordsByDate(userID, dateStr)
 	if err != nil {
 		h.logger.Error("Failed to get words by date", zap.Error(err))
-		return c.Respond(&tele.CallbackResponse{Text: "Ошибка при загрузке"})
+		return nil // Callback уже подтверждён
 	}
 
 	if len(words) == 0 {
-		return c.Respond(&tele.CallbackResponse{Text: "Нет слов за этот день"})
+		// Callback уже подтверждён
+		return nil
 	}
 
 	// Build message with all words
@@ -349,18 +373,24 @@ func (h *Handler) handleDaySelection(c tele.Context, data string) error {
 		markup.Row(btnBackToDays, btnMainMenu),
 	)
 
+	// Edit message - только edit, никаких send
 	if err := c.Edit(text, markup); err != nil {
-		if handleErr := h.handleEditError(err, c, userID); handleErr == nil {
-			return nil // Message was already modified, just acknowledged
-		}
-		return c.Send(text, markup)
+		h.handleEditError(err, c, userID)
+		// Callback уже подтверждён, просто логируем ошибку
 	}
-	return c.Respond()
+	return nil
 }
 
 // handleHideFor7Days hides a word for 7 days and shows success message with "Ещё" button
 func (h *Handler) handleHideFor7Days(c tele.Context, data string) error {
 	userID := c.Sender().ID
+
+	// КРИТИЧЕСКИ ВАЖНО: Отвечаем на callback СРАЗУ
+	if c.Callback() != nil {
+		if err := c.Respond(); err != nil {
+			h.logger.Warn("Failed to acknowledge callback", zap.Error(err))
+		}
+	}
 
 	// Extract word ID
 	data = strings.TrimSpace(data)
@@ -368,13 +398,13 @@ func (h *Handler) handleHideFor7Days(c tele.Context, data string) error {
 	wordID, err := strconv.Atoi(wordIDStr)
 	if err != nil {
 		h.logger.Error("Failed to parse word ID", zap.Error(err), zap.String("data", data))
-		return c.Respond(&tele.CallbackResponse{Text: "Ошибка"})
+		return nil // Callback уже подтверждён
 	}
 
 	// Hide the word
 	if err := h.wordService.HideWordFor7Days(wordID); err != nil {
 		h.logger.Error("Failed to hide word for 7 days", zap.Error(err), zap.Int("word_id", wordID))
-		return c.Respond(&tele.CallbackResponse{Text: "Ошибка при скрытии слова"})
+		return nil // Callback уже подтверждён
 	}
 
 	// Show success message with "Ещё" button
@@ -382,18 +412,24 @@ func (h *Handler) handleHideFor7Days(c tele.Context, data string) error {
 	markup := &tele.ReplyMarkup{}
 	markup.Inline(markup.Row(btnMore))
 
+	// Edit message - только edit, никаких send
 	if err := c.Edit(text, markup); err != nil {
-		if handleErr := h.handleEditError(err, c, userID); handleErr == nil {
-			return nil
-		}
-		return c.Send(text, markup)
+		h.handleEditError(err, c, userID)
+		// Callback уже подтверждён, просто логируем ошибку
 	}
-	return c.Respond()
+	return nil
 }
 
 // handleHideForeverConfirm shows confirmation dialog for permanent hiding
 func (h *Handler) handleHideForeverConfirm(c tele.Context, data string) error {
 	userID := c.Sender().ID
+
+	// КРИТИЧЕСКИ ВАЖНО: Отвечаем на callback СРАЗУ
+	if c.Callback() != nil {
+		if err := c.Respond(); err != nil {
+			h.logger.Warn("Failed to acknowledge callback", zap.Error(err))
+		}
+	}
 
 	// Extract word ID
 	data = strings.TrimSpace(data)
@@ -401,7 +437,7 @@ func (h *Handler) handleHideForeverConfirm(c tele.Context, data string) error {
 	wordID, err := strconv.Atoi(wordIDStr)
 	if err != nil {
 		h.logger.Error("Failed to parse word ID", zap.Error(err), zap.String("data", data))
-		return c.Respond(&tele.CallbackResponse{Text: "Ошибка"})
+		return nil // Callback уже подтверждён
 	}
 
 	// Show confirmation message
@@ -414,18 +450,24 @@ func (h *Handler) handleHideForeverConfirm(c tele.Context, data string) error {
 		),
 	)
 
+	// Edit message - только edit, никаких send
 	if err := c.Edit(text, markup); err != nil {
-		if handleErr := h.handleEditError(err, c, userID); handleErr == nil {
-			return nil
-		}
-		return c.Send(text, markup)
+		h.handleEditError(err, c, userID)
+		// Callback уже подтверждён, просто логируем ошибку
 	}
-	return c.Respond()
+	return nil
 }
 
 // handleConfirmHideForever permanently hides a word and shows success message with "Ещё" button
 func (h *Handler) handleConfirmHideForever(c tele.Context, data string) error {
 	userID := c.Sender().ID
+
+	// КРИТИЧЕСКИ ВАЖНО: Отвечаем на callback СРАЗУ
+	if c.Callback() != nil {
+		if err := c.Respond(); err != nil {
+			h.logger.Warn("Failed to acknowledge callback", zap.Error(err))
+		}
+	}
 
 	// Extract word ID
 	data = strings.TrimSpace(data)
@@ -433,13 +475,13 @@ func (h *Handler) handleConfirmHideForever(c tele.Context, data string) error {
 	wordID, err := strconv.Atoi(wordIDStr)
 	if err != nil {
 		h.logger.Error("Failed to parse word ID", zap.Error(err), zap.String("data", data))
-		return c.Respond(&tele.CallbackResponse{Text: "Ошибка"})
+		return nil // Callback уже подтверждён
 	}
 
 	// Hide the word forever
 	if err := h.wordService.HideWordForever(wordID); err != nil {
 		h.logger.Error("Failed to hide word forever", zap.Error(err), zap.Int("word_id", wordID))
-		return c.Respond(&tele.CallbackResponse{Text: "Ошибка при скрытии слова"})
+		return nil // Callback уже подтверждён
 	}
 
 	// Show success message with "Ещё" button
@@ -447,13 +489,12 @@ func (h *Handler) handleConfirmHideForever(c tele.Context, data string) error {
 	markup := &tele.ReplyMarkup{}
 	markup.Inline(markup.Row(btnMore))
 
+	// Edit message - только edit, никаких send
 	if err := c.Edit(text, markup); err != nil {
-		if handleErr := h.handleEditError(err, c, userID); handleErr == nil {
-			return nil
-		}
-		return c.Send(text, markup)
+		h.handleEditError(err, c, userID)
+		// Callback уже подтверждён, просто логируем ошибку
 	}
-	return c.Respond()
+	return nil
 }
 
 // handleCancelHide cancels the hide operation and returns to word display
@@ -464,7 +505,7 @@ func (h *Handler) handleCancelHide(c tele.Context, data string) error {
 	_, err := strconv.Atoi(wordIDStr)
 	if err != nil {
 		h.logger.Error("Failed to parse word ID", zap.Error(err), zap.String("data", data))
-		return c.Respond(&tele.CallbackResponse{Text: "Ошибка"})
+		return nil // Callback уже подтверждён
 	}
 
 	// Show a new random pair (we don't have GetWordByID method to restore the original word)
