@@ -60,12 +60,14 @@ func (r *WordRepo) GetRandomWord(userID int64) (*domain.Word, error) {
 }
 
 // GetDaysWithWords returns days that have words with counts
+// Uses Moscow timezone for day calculation (day changes at 00:00 MSK)
 func (r *WordRepo) GetDaysWithWords(userID int64, limit, offset int) ([]domain.Day, error) {
 	query := `
-		SELECT DATE(created_at) as day, COUNT(*) as count
+		SELECT DATE(created_at AT TIME ZONE 'Europe/Moscow') as day, COUNT(*) as count
 		FROM words
-		WHERE user_id = $1 AND created_at >= NOW() - INTERVAL '60 days'
-		GROUP BY DATE(created_at)
+		WHERE user_id = $1 
+			AND created_at >= (NOW() AT TIME ZONE 'Europe/Moscow' - INTERVAL '60 days') AT TIME ZONE 'Europe/Moscow'
+		GROUP BY DATE(created_at AT TIME ZONE 'Europe/Moscow')
 		ORDER BY day DESC
 		LIMIT $2 OFFSET $3
 	`
@@ -89,11 +91,13 @@ func (r *WordRepo) GetDaysWithWords(userID int64, limit, offset int) ([]domain.D
 }
 
 // GetTotalDaysCount returns total number of days with words
+// Uses Moscow timezone for day calculation
 func (r *WordRepo) GetTotalDaysCount(userID int64) (int, error) {
 	query := `
-		SELECT COUNT(DISTINCT DATE(created_at))
+		SELECT COUNT(DISTINCT DATE(created_at AT TIME ZONE 'Europe/Moscow'))
 		FROM words
-		WHERE user_id = $1 AND created_at >= NOW() - INTERVAL '60 days'
+		WHERE user_id = $1 
+			AND created_at >= (NOW() AT TIME ZONE 'Europe/Moscow' - INTERVAL '60 days') AT TIME ZONE 'Europe/Moscow'
 	`
 
 	var count int
@@ -102,15 +106,27 @@ func (r *WordRepo) GetTotalDaysCount(userID int64) (int, error) {
 }
 
 // GetWordsByDate returns all words for a specific date
+// Uses Moscow timezone for day calculation
 func (r *WordRepo) GetWordsByDate(userID int64, date time.Time) ([]domain.Word, error) {
+	// Convert the date to start of day in Moscow timezone
+	moscowLocation, err := time.LoadLocation("Europe/Moscow")
+	if err != nil {
+		return nil, err
+	}
+	
+	// Get start and end of the day in Moscow timezone
+	dateStart := time.Date(date.Year(), date.Month(), date.Day(), 0, 0, 0, 0, moscowLocation)
+	dateEnd := dateStart.Add(24 * time.Hour)
+	
 	query := `
 		SELECT id, user_id, word, translation, created_at, hidden_until, hidden_forever
 		FROM words
-		WHERE user_id = $1 AND DATE(created_at) = DATE($2)
+		WHERE user_id = $1 
+			AND DATE(created_at AT TIME ZONE 'Europe/Moscow') = DATE($2 AT TIME ZONE 'Europe/Moscow')
 		ORDER BY created_at DESC
 	`
 
-	rows, err := r.db.Query(query, userID, date)
+	rows, err := r.db.Query(query, userID, dateStart)
 	if err != nil {
 		return nil, err
 	}
