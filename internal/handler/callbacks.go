@@ -2,6 +2,7 @@ package handler
 
 import (
 	"fmt"
+	"math/rand"
 	"strconv"
 	"strings"
 	"sync"
@@ -210,7 +211,22 @@ func (h *Handler) handleRandomPair(c tele.Context) error {
 		return nil
 	}
 
-	text := fmt.Sprintf("🎲 Случайная пара:\n\n📝 %s\n🔄 %s", word.Word, word.Translation)
+	// Рандомно выбираем, что показывать открыто, а что под спойлером
+	rand.Seed(time.Now().UnixNano())
+	showWordFirst := rand.Intn(2) == 0
+
+	var visibleText, spoilerText string
+	if showWordFirst {
+		visibleText = fmt.Sprintf("📝 %s", word.Word)
+		spoilerText = fmt.Sprintf("🔄 %s", word.Translation)
+	} else {
+		visibleText = fmt.Sprintf("🔄 %s", word.Translation)
+		spoilerText = fmt.Sprintf("📝 %s", word.Word)
+	}
+
+	// Формируем текст со спойлером в формате HTML
+	// В Telegram Bot API спойлеры работают через тег <spoiler>текст</spoiler>
+	text := fmt.Sprintf("🎲 Случайная пара:\n\n%s\n<spoiler>%s</spoiler>", visibleText, spoilerText)
 
 	markup := &tele.ReplyMarkup{}
 	markup.Inline(
@@ -223,15 +239,16 @@ func (h *Handler) handleRandomPair(c tele.Context) error {
 	)
 
 	// Edit message - только edit, никаких send
+	// Указываем режим парсинга HTML для поддержки спойлеров
 	if c.Callback() != nil {
-		if err := c.Edit(text, markup); err != nil {
+		if err := c.Edit(text, markup, &tele.SendOptions{ParseMode: "HTML"}); err != nil {
 			h.handleEditError(err, c, userID)
 			// Callback уже подтверждён, просто логируем ошибку
 		}
 		return nil
 	}
 	// Это не callback (например команда), можно отправлять новое
-	return c.Send(text, markup)
+	return c.Send(text, markup, &tele.SendOptions{ParseMode: "HTML"})
 }
 
 // handleCancel cancels current operation and resets state
