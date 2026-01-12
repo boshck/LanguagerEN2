@@ -2,6 +2,7 @@ package handler
 
 import (
 	"fmt"
+	"html"
 	"math/rand"
 	"strconv"
 	"strings"
@@ -215,18 +216,21 @@ func (h *Handler) handleRandomPair(c tele.Context) error {
 	rand.Seed(time.Now().UnixNano())
 	showWordFirst := rand.Intn(2) == 0
 
+	escWord := html.EscapeString(word.Word)
+	escTranslation := html.EscapeString(word.Translation)
+
 	var visibleText, spoilerText string
 	if showWordFirst {
-		visibleText = fmt.Sprintf("📝 %s", word.Word)
-		spoilerText = fmt.Sprintf("🔄 %s", word.Translation)
+		visibleText = fmt.Sprintf("📝 %s", escWord)
+		spoilerText = fmt.Sprintf("🔄 %s", escTranslation)
 	} else {
-		visibleText = fmt.Sprintf("🔄 %s", word.Translation)
-		spoilerText = fmt.Sprintf("📝 %s", word.Word)
+		visibleText = fmt.Sprintf("🔄 %s", escTranslation)
+		spoilerText = fmt.Sprintf("📝 %s", escWord)
 	}
 
 	// Формируем текст со спойлером в формате HTML
-	// В Telegram Bot API спойлеры работают через тег <spoiler>текст</spoiler>
-	text := fmt.Sprintf("🎲 Случайная пара:\n\n%s\n<spoiler>%s</spoiler>", visibleText, spoilerText)
+	// В Telegram Bot API спойлеры работают через тег <tg-spoiler>текст</tg-spoiler>
+	text := fmt.Sprintf("🎲 Случайная пара:\n\n%s\n<tg-spoiler>%s</tg-spoiler>", visibleText, spoilerText)
 
 	markup := &tele.ReplyMarkup{}
 	markup.Inline(
@@ -241,14 +245,14 @@ func (h *Handler) handleRandomPair(c tele.Context) error {
 	// Edit message - только edit, никаких send
 	// Указываем режим парсинга HTML для поддержки спойлеров
 	if c.Callback() != nil {
-		if err := c.Edit(text, markup, &tele.SendOptions{ParseMode: "HTML"}); err != nil {
+		if err := c.Edit(text, markup, &tele.SendOptions{ParseMode: tele.ModeHTML}); err != nil {
 			h.handleEditError(err, c, userID)
 			// Callback уже подтверждён, просто логируем ошибку
 		}
 		return nil
 	}
 	// Это не callback (например команда), можно отправлять новое
-	return c.Send(text, markup, &tele.SendOptions{ParseMode: "HTML"})
+	return c.Send(text, markup, &tele.SendOptions{ParseMode: tele.ModeHTML})
 }
 
 // handleCancel cancels current operation and resets state
