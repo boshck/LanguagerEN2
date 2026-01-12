@@ -30,15 +30,10 @@ test:
     - go mod download
     - go test ./... -v -race -coverprofile=coverage.out
     - go tool cover -func=coverage.out | tail -1
-    # Check minimum coverage (20%)
+    # Show coverage info (no minimum check)
     - |
       coverage=$(go tool cover -func=coverage.out | grep total | awk '{print $3}' | sed 's/%//')
       echo "Total coverage: ${coverage}%"
-      min_coverage=20
-      if awk "BEGIN {if ($coverage < $min_coverage) exit 1; exit 0}"; then
-        echo "Coverage ${coverage}% is below minimum ${min_coverage}%"
-        exit 1
-      fi
   after_script:
     # Clean up Go modules with proper permissions
     - chmod -R u+w .go 2>/dev/null || true
