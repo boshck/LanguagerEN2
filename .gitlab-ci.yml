@@ -24,7 +24,6 @@ test:
   before_script:
     # Clean up old Go modules if they exist
     - rm -rf .go || true
-    - go version
   script:
     - echo "Running tests..."
     - go mod download
