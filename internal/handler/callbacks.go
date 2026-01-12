@@ -244,15 +244,18 @@ func (h *Handler) handleRandomPair(c tele.Context) error {
 
 	// Edit message - только edit, никаких send
 	// Указываем режим парсинга HTML для поддержки спойлеров
+	// В Telegram Bot API можно одновременно использовать parse_mode и reply_markup
+	// Ссылка: https://core.telegram.org/bots/api#editmessagetext
+	opts := &tele.SendOptions{ParseMode: "HTML"}
 	if c.Callback() != nil {
-		if err := c.Edit(text, markup, &tele.SendOptions{ParseMode: tele.ModeHTML}); err != nil {
+		if err := c.Edit(text, markup, opts); err != nil {
 			h.handleEditError(err, c, userID)
 			// Callback уже подтверждён, просто логируем ошибку
 		}
 		return nil
 	}
 	// Это не callback (например команда), можно отправлять новое
-	return c.Send(text, markup, &tele.SendOptions{ParseMode: tele.ModeHTML})
+	return c.Send(text, markup, opts)
 }
 
 // handleCancel cancels current operation and resets state
