@@ -116,7 +116,6 @@ func (r *WordRepo) GetWordsByDate(userID int64, date time.Time) ([]domain.Word, 
 	
 	// Get start and end of the day in Moscow timezone
 	dateStart := time.Date(date.Year(), date.Month(), date.Day(), 0, 0, 0, 0, moscowLocation)
-	dateEnd := dateStart.Add(24 * time.Hour)
 	
 	query := `
 		SELECT id, user_id, word, translation, created_at, hidden_until, hidden_forever

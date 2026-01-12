@@ -41,7 +41,7 @@ func (h *Handler) handleStart(c tele.Context) error {
 	// Edit message if callback, send new if command
 	if c.Callback() != nil {
 		if err := c.Edit(text, markup); err != nil {
-			if handleErr := h.handleEditError(err, c, userID); handleErr == nil {
+			if handled := h.handleEditError(err, c, userID); handled {
 				return nil // Message was already modified, just acknowledged
 			}
 			return c.Send(text, markup)
